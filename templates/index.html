@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLIP-CAM | AI Interpreter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Grotesk:wght@300;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Main Split View -->
+        <main class="split-view">
+
+            <!-- Left: Visual Input -->
+            <section class="visual-panel">
+                <div class="video-wrapper">
+                    <img src="/video_feed" alt="Live Feed" class="live-feed">
+                    <div class="rec-indicator">
+                        <span class="dot"></span> LIVE INPUT
+                    </div>
+                </div>
+                <div class="visual-controls">
+                    <button id="snapshot-btn" class="icon-btn" title="Save Snapshot">
+                        <i class="fas fa-camera"></i>
+                    </button>
+                    <span id="snapshot-status" class="status-msg"></span>
+                </div>
+            </section>
+
+            <!-- Right: Interaction & Output -->
+            <section class="interaction-panel">
+                <div class="content-wrapper">
+                    <header class="panel-header">
+                        <div class="logo">BLIP<span class="highlight">CAM</span></div>
+                        <div class="lang-selector">
+                            <label><i class="fas fa-globe"></i></label>
+                            <select id="language-select">
+                                <option value="en">English</option>
+                                <option value="es">Spanish (Español)</option>
+                                <option value="fr">French (Français)</option>
+                                <option value="de">German (Deutsch)</option>
+                                <option value="hi">Hindi (हिन्दी)</option>
+                                <option value="zh-CN">Chinese (中文)</option>
+                                <option value="ja">Japanese (日本語)</option>
+                                <option value="ko">Korean (한국어)</option>
+                                <option value="ru">Russian (Русский)</option>
+                                <option value="ar">Arabic (العربية)</option>
+                            </select>
+                        </div>
+                    </header>
+
+                    <div class="caption-display">
+                        <div class="caption-label">GENERATED CAPTION</div>
+                        <h1 id="live-caption" class="caption-text">Initializing AI Model...</h1>
+                    </div>
+
+                    <div class="action-bar">
+                        <button id="speak-btn" class="action-btn primary-btn">
+                            <i class="fas fa-volume-up"></i>
+                            <span>Read Aloud</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>
