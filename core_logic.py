@@ -6,6 +6,10 @@ import time
 from PIL import Image
 from threading import Thread, Lock
 from queue import Queue
+import smtplib
+from email.message import EmailMessage
+from ultralytics import YOLO
+import os
 
 def setup_logging():
     """Configure logging with basic formatting"""
@@ -16,6 +20,95 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 logger = setup_logging()
+
+class EmailNotifier:
+    def __init__(self):
+        self.sender_email = None
+        self.app_password = None
+        self.receiver_email = None
+        self.last_email_time = 0
+        self.cooldown = 30  # Seconds between emails
+
+    def configure(self, sender, password, receiver):
+        self.sender_email = sender
+        self.app_password = password
+        self.receiver_email = receiver
+        logger.info(f"Email configured: {sender} -> {receiver}")
+
+    def send_alert(self, image_frame, detection_details):
+        if not self.sender_email or not self.app_password or not self.receiver_email:
+            return False, "Email not configured"
+
+        if time.time() - self.last_email_time < self.cooldown:
+            return False, "Cooldown active"
+
+        try:
+            msg = EmailMessage()
+            msg['Subject'] = 'SECURITY ALERT: Suspicious Activity Detected'
+            msg['From'] = self.sender_email
+            msg['To'] = self.receiver_email
+            msg.set_content(f"Suspicious activity detected!\n\nDetails: {detection_details}\nTime: {time.ctime()}")
+
+            # Attach image
+            success, encoded_image = cv2.imencode('.jpg', image_frame)
+            if success:
+                msg.add_attachment(encoded_image.tobytes(), maintype='image', subtype='jpeg', filename='intruder.jpg')
+
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                smtp.login(self.sender_email, self.app_password)
+                smtp.send_message(msg)
+
+            self.last_email_time = time.time()
+            logger.info("Alert email sent successfully")
+            return True, "Email sent"
+        except Exception as e:
+            logger.error(f"Failed to send email: {e}")
+            return False, str(e)
+
+class SecuritySystem:
+    def __init__(self, device):
+        self.device = device
+        self.model = None
+        # Load YOLO model
+        try:
+            print("Loading YOLOv8 model...")
+            self.model = YOLO("yolov8n.pt")
+            if device == 'cuda':
+                self.model.to('cuda')
+            print("YOLOv8 loaded.")
+        except Exception as e:
+            logger.error(f"Failed to load YOLO: {e}")
+
+        self.email_notifier = EmailNotifier()
+        self.active = False
+        self.last_detection = None
+
+    def process_frame(self, frame):
+        if not self.model: # or not self.active: # logic moved to app.py for active check
+            return frame, False, ""
+
+        # Run inference
+        results = self.model(frame, verbose=False)
+        annotated_frame = results[0].plot()
+        
+        person_detected = False
+        detection_info = ""
+
+        # Check for 'person' class (id 0)
+        for r in results:
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                if self.model.names[cls_id] == 'person':
+                    conf = float(box.conf[0])
+                    if conf > 0.5:
+                        person_detected = True
+                        detection_info = f"Person detected ({conf:.2f})"
+                        
+                        # Trigger alert logic
+                        self.email_notifier.send_alert(frame, detection_info)
+                        break # One person is enough
+        
+        return annotated_frame, person_detected, detection_info
 
 class CaptionGenerator:
     def __init__(self, processor, model, device):

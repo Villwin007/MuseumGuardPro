@@ -1,30 +1,43 @@
 import cv2
 import time
 import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
-from core_logic import load_models, CaptionGenerator
+from core_logic import load_models, CaptionGenerator, SecuritySystem
 from gtts import gTTS
 import io
 from deep_translator import GoogleTranslator
 from pydantic import BaseModel
+import shutil
+import os
 
 # Global variables
 processor = None
 model = None
 device = None
 caption_generator = None
+security_system = None
 camera = None
+
+# Security Mode State
+security_mode = "webcam" # 'webcam' or 'video'
+uploaded_video_path = None
+security_video_capture = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global processor, model, device, caption_generator, camera
+    global processor, model, device, caption_generator, security_system, camera
     # Startup
     print("Lifespan: Loading models...")
     processor, model, device = load_models()
+    
+    # Initialize Security System
+    print("Lifespan: Initializing Security System...")
+    security_system = SecuritySystem(device)
+
     if processor and model:
         print("Lifespan: Models loaded. Initializing CaptionGenerator...")
         caption_generator = CaptionGenerator(processor, model, device)
@@ -44,6 +57,8 @@ async def lifespan(app: FastAPI):
         caption_generator.stop()
     if camera:
         camera.release()
+    if security_video_capture:
+        security_video_capture.release()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -58,8 +73,13 @@ class SpeakRequest(BaseModel):
     text: str
     lang: str
 
-def gen_frames():
-    """Generates JPEG frames for the video stream."""
+class EmailConfig(BaseModel):
+    sender: str
+    password: str
+    receiver: str
+
+def gen_frames_caption():
+    """Generates JPEG frames for the Captioning page (Webcam Only)."""
     global camera, caption_generator
     
     while True:
@@ -71,7 +91,6 @@ def gen_frames():
         if not success:
             continue
             
-        # Send frame to caption generator (it handles its own threading/skipping)
         if caption_generator:
             caption_generator.update_frame(frame)
         
@@ -80,13 +99,67 @@ def gen_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-@app.get("/")
-def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+def gen_frames_security():
+    """Generates Annotated JPEG frames for the Security page (Webcam or Video)."""
+    global camera, security_system, security_mode, security_video_capture, uploaded_video_path
+    
+    while True:
+        frame = None
+        
+        if security_mode == "webcam":
+             if not camera or not camera.isOpened():
+                time.sleep(1)
+                continue
+             success, frame = camera.read()
+             if not success:
+                 continue
+        
+        elif security_mode == "video":
+            if not security_video_capture:
+                 if uploaded_video_path and os.path.exists(uploaded_video_path):
+                     security_video_capture = cv2.VideoCapture(uploaded_video_path)
+                 else:
+                     time.sleep(1)
+                     continue
+            
+            success, frame = security_video_capture.read()
+            if not success:
+                # Loop video
+                security_video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+        
+        if frame is not None and security_system:
+             # Run Inference
+             annotated_frame, detected, info = security_system.process_frame(frame)
+             
+             # Encode
+             ret, buffer = cv2.imencode('.jpg', annotated_frame)
+             frame_bytes = buffer.tobytes()
+             yield (b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        else:
+            time.sleep(0.1)
 
-@app.get("/video_feed")
-def video_feed():
-    return StreamingResponse(gen_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("caption.html", {"request": request})
+
+@app.get("/captioning")
+def caption_page(request: Request):
+    return templates.TemplateResponse("caption.html", {"request": request})
+
+@app.get("/security")
+def security_page(request: Request):
+    return templates.TemplateResponse("security.html", {"request": request})
+
+@app.get("/video_feed_caption")
+def video_feed_caption():
+    return StreamingResponse(gen_frames_caption(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/video_feed_security")
+def video_feed_security():
+    return StreamingResponse(gen_frames_security(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/stats")
 def get_stats():
@@ -122,8 +195,46 @@ async def speak_text(request: SpeakRequest):
         print(f"TTS Error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/configure_email")
+async def configure_email(config: EmailConfig):
+    global security_system
+    if security_system:
+        security_system.email_notifier.configure(config.sender, config.password, config.receiver)
+        return {"status": "success", "message": "Email configured"}
+    return {"status": "error", "message": "System not ready"}
+
+@app.post("/upload_video")
+async def upload_video(file: UploadFile = File(...)):
+    global security_mode, uploaded_video_path, security_video_capture
+    try:
+        temp_dir = "temp"
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+            
+        uploaded_video_path = os.path.join(temp_dir, file.filename)
+        with open(uploaded_video_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        security_mode = "video"
+        if security_video_capture:
+            security_video_capture.release()
+        security_video_capture = None # Will be re-init in loop
+        
+        return {"status": "success", "message": "Video uploaded and mode switched"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/switch_source")
+async def switch_source(source: str): # 'webcam' or 'video'
+    global security_mode
+    if source in ["webcam", "video"]:
+        security_mode = source
+        return {"status": "success", "mode": source}
+    return {"status": "error"}
+
 @app.post("/snapshot")
 def save_snapshot():
+    # Only for webcam snapshot
     global camera
     if camera and camera.isOpened():
         success, frame = camera.read()
