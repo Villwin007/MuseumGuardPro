@@ -192,9 +192,10 @@ def get_stats():
 
 @app.get("/security_status")
 def get_security_status():
+    """Returns security system state and autopilot status."""
     global security_system
     status = "Normal"
-    detail = "System Secure"
+    autopilot = False
     
     if security_system:
         # We need to look at the last frame result. 
@@ -202,8 +203,19 @@ def get_security_status():
         # Let's modify SecuritySystem to store 'current_state'
         if security_system.current_state:
             status = security_system.current_state
+        autopilot = security_system.autopilot_active
             
-    return {"status": status}
+    return {"status": status, "autopilot": autopilot}
+
+@app.post("/toggle_autopilot")
+async def toggle_autopilot(data: dict):
+    global security_system
+    if security_system:
+        security_system.autopilot_active = data.get("active", False)
+        mode = "ON" if security_system.autopilot_active else "OFF"
+        print(f"Auto Pilot switched {mode}")
+        return {"status": "success", "active": security_system.autopilot_active}
+    return {"status": "error", "message": "System not ready"}
 
 @app.post("/translate")
 async def translate_text(request: TranslationRequest):

@@ -86,6 +86,7 @@ class SecuritySystem:
         self.email_notifier = EmailNotifier()
         self.active = False
         self.current_state = "Normal"
+        self.autopilot_active = False # Default: Monitoring ON, Alerts OFF
 
     def process_frame(self, frame):
         if not self.model: 
@@ -112,8 +113,11 @@ class SecuritySystem:
         
         if person_detected:
             self.current_state = "Suspicious Activity Detected"
-            # Trigger alert logic
-            self.email_notifier.send_alert(frame, detection_info)
+            # Trigger alert logic ONLY if Auto Pilot is active
+            if self.autopilot_active:
+                self.email_notifier.send_alert(frame, detection_info)
+            else:
+                print("Suspicious Activity Detected but Auto Pilot is OFF. Email skipped.")
         else:
             self.current_state = "Normal"
         
