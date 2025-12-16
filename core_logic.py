@@ -23,21 +23,24 @@ logger = setup_logging()
 
 class EmailNotifier:
     def __init__(self):
-        self.sender_email = None
-        self.app_password = None
-        self.receiver_email = None
+        # HARDCODED CREDENTIALS - REPLACE WITH YOUR REAL SENDER DETAILS
+        self.sender_email = "villwin11@gmail.com" # Placeholder
+        self.app_password = "wsju eiov nied sxkl" # Placeholder
+        self.receiver_email = "harishs1520@gmail.com"
+        
         self.last_email_time = 0
         self.cooldown = 30  # Seconds between emails
 
     def configure(self, sender, password, receiver):
+        # Override if needed, but defaults are set
         self.sender_email = sender
         self.app_password = password
         self.receiver_email = receiver
-        logger.info(f"Email configured: {sender} -> {receiver}")
 
     def send_alert(self, image_frame, detection_details):
-        if not self.sender_email or not self.app_password or not self.receiver_email:
-            return False, "Email not configured"
+        if self.app_password == "xxxx xxxx xxxx xxxx":
+             logger.warning("Email Alert Triggered but Sender Password is NOT set in core_logic.py")
+             return False, "Sender config missing"
 
         if time.time() - self.last_email_time < self.cooldown:
             return False, "Cooldown active"
@@ -54,12 +57,13 @@ class EmailNotifier:
             if success:
                 msg.add_attachment(encoded_image.tobytes(), maintype='image', subtype='jpeg', filename='intruder.jpg')
 
+            # Note: Using standard Gmail SMTP port
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
                 smtp.login(self.sender_email, self.app_password)
                 smtp.send_message(msg)
 
             self.last_email_time = time.time()
-            logger.info("Alert email sent successfully")
+            logger.info(f"Alert email sent to {self.receiver_email}")
             return True, "Email sent"
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
@@ -81,10 +85,10 @@ class SecuritySystem:
 
         self.email_notifier = EmailNotifier()
         self.active = False
-        self.last_detection = None
+        self.current_state = "Normal"
 
     def process_frame(self, frame):
-        if not self.model: # or not self.active: # logic moved to app.py for active check
+        if not self.model: 
             return frame, False, ""
 
         # Run inference
@@ -95,18 +99,23 @@ class SecuritySystem:
         detection_info = ""
 
         # Check for 'person' class (id 0)
+        num_persons = 0
         for r in results:
             for box in r.boxes:
                 cls_id = int(box.cls[0])
                 if self.model.names[cls_id] == 'person':
                     conf = float(box.conf[0])
                     if conf > 0.5:
+                        num_persons += 1
                         person_detected = True
-                        detection_info = f"Person detected ({conf:.2f})"
-                        
-                        # Trigger alert logic
-                        self.email_notifier.send_alert(frame, detection_info)
-                        break # One person is enough
+                        detection_info = f"INTRUDER DETECTED ({conf:.2f})"
+        
+        if person_detected:
+            self.current_state = "Suspicious Activity Detected"
+            # Trigger alert logic
+            self.email_notifier.send_alert(frame, detection_info)
+        else:
+            self.current_state = "Normal"
         
         return annotated_frame, person_detected, detection_info
 

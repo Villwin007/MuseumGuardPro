@@ -383,4 +383,8 @@ body {
 #security-status {
     background: var(--accent);
     color: #000;
-}
+}/* Status Display Styles */
+.status-normal { display: flex; align-items: center; gap: 1rem; color: var(--accent); background: rgba(38, 166, 154, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(38, 166, 154, 0.3); font-size: 1.2rem; font-weight: bold; font-family: var(--font-heading); }
+.status-danger { display: flex; align-items: center; gap: 1rem; color: var(--alert-red); background: rgba(255, 68, 68, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255, 68, 68, 0.3); font-size: 1.2rem; font-weight: bold; font-family: var(--font-heading); animation: pulse-red 1s infinite; }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(255, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); } }
+.alert-info { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); }

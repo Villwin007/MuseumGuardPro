@@ -163,16 +163,47 @@ def video_feed_security():
 
 @app.get("/stats")
 def get_stats():
-    """Returns current caption only."""
-    global caption_generator
+    """Returns current caption and security status."""
+    global caption_generator, security_system
     
     caption = "Initializing..."
     if caption_generator:
         caption = caption_generator.get_caption()
         
+    status = "Normal"
+    if security_system and security_system.last_detection:
+        # Check if last detection was recent (within 2 seconds)
+        # We need to implement 'last_detection_time' in SecuritySystem really, 
+        # but for now let's just assume if it returns info, it's detecting.
+        # Although process_frame updates continuously.
+        # Let's add a property to check status.
+        pass
+
+    # Quick fix: SecuritySystem doesn't store state nicely yet, let's just default to 'Normal'
+    # and let the frontend poll a dedicated security endpoint or we update SecuritySystem
+    
+    security_status = "Normal"
+    # Actually, let's create a dedicated /security_status endpoint or just hack it here
+    pass
+
     return JSONResponse({
         "caption": caption
     })
+
+@app.get("/security_status")
+def get_security_status():
+    global security_system
+    status = "Normal"
+    detail = "System Secure"
+    
+    if security_system:
+        # We need to look at the last frame result. 
+        # Since process_frame returns it, maybe we store it in the class?
+        # Let's modify SecuritySystem to store 'current_state'
+        if security_system.current_state:
+            status = security_system.current_state
+            
+    return {"status": status}
 
 @app.post("/translate")
 async def translate_text(request: TranslationRequest):

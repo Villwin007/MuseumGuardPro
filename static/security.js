@@ -47,30 +47,37 @@ videoInput.addEventListener('change', async (e) => {
     }
 });
 
-// Email Config
-saveConfigBtn.addEventListener('click', async () => {
-    const sender = senderInput.value;
-    const password = passInput.value;
-    const receiver = receiverInput.value;
+// Status Polling
+const statusDisplay = document.getElementById('status-display');
+const statusText = document.getElementById('status-text');
+const statusIcon = document.getElementById('status-icon');
+const securityFeed = document.getElementById('security-feed');
 
-    if (!sender || !password || !receiver) {
-        configMsg.innerText = "Please fill all fields";
-        return;
+function updateStatusUI(status) {
+    statusDisplay.className = ''; // Reset classes
+
+    if (status === "Suspicious Activity Detected") {
+        statusDisplay.classList.add('status-danger');
+        statusText.innerText = "SUSPICIOUS ACTIVITY";
+        statusIcon.className = "fas fa-exclamation-triangle";
+        securityFeed.style.border = "4px solid red";
+    } else {
+        statusDisplay.classList.add('status-normal');
+        statusText.innerText = "NORMAL";
+        statusIcon.className = "fas fa-check-circle";
+        securityFeed.style.border = "none";
     }
+}
 
-    configMsg.innerText = "Saving...";
-
+async function checkStatus() {
     try {
-        const res = await fetch('/configure_email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sender, password, receiver })
-        });
+        const res = await fetch('/security_status');
         const data = await res.json();
-        configMsg.innerText = data.message;
-        configMsg.style.color = "#26a69a";
+        updateStatusUI(data.status);
     } catch (e) {
-        configMsg.innerText = "Failed";
-        configMsg.style.color = "#ff4444";
+        console.error("Status check failed", e);
     }
-});
+}
+
+// Poll every 1s
+setInterval(checkStatus, 1000);
